@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>HTML to JSO Generator</title>
+</head>
+<body style="font-family: sans-serif; padding: 20px;">
+    <h3>HTML to JSO Converter</h3>
+    <textarea id="inputHtml" rows="10" style="width: 100%;" placeholder="Paste HTML di sini..."></textarea><br><br>
+    <button onclick="convertJSO()" style="padding: 10px 20px; cursor: pointer;">Convert to JSO</button><br><br>
+    <textarea id="outputJso" rows="10" style="width: 100%;" placeholder="Hasil JSO script..."></textarea>
+
+    <script>
+        function convertJSO() {
+            const input = document.getElementById('inputHtml').value;
+            // Mengubah teks HTML menjadi format escape hex
+            const escaped = escape(input);
+            const jsoOutput = `document.write(unescape('${escaped}'));`;
+            document.getElementById('outputJso').value = jsoOutput;
+        }
+    </script>
+</body>
+</html>
