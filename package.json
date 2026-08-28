@@ -1,11 +1,8 @@
 {
   "name": "html-jso-converter",
   "private": true,
-  "version": "2.0.0",
+  "version": "2.1.0",
   "scripts": {
     "dev": "vercel dev"
-  },
-  "dependencies": {
-    "@vercel/blob": "latest"
   }
 }
