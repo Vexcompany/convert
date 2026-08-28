@@ -119,11 +119,8 @@
       return (hash >>> 0).toString(16).padStart(8, '0') + '.js';
     }
 
-    // PERBAIKAN UTAMA: pakai .map+join bukan spread String.fromCodePoint(...codes)
-    // agar HTML besar (50k+ char) tidak meledak call-stack limit
     function jsoSource() {
       if (!output.value) return '';
-      // output.value sudah "60,33,68..." -> bungkus jadi array literal
       return `document.write([${output.value}].map(c=>String.fromCodePoint(c)).join(''));\n`;
     }
 
