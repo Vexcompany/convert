@@ -1,8 +1,11 @@
 {
-  "rewrites": [
-    {
-      "source": "/jso/:id.js",
-      "destination": "/api/jso/:id"
-    }
-  ]
+  "name": "html-jso-converter",
+  "private": true,
+  "version": "2.0.0",
+  "scripts": {
+    "dev": "vercel dev"
+  },
+  "dependencies": {
+    "@vercel/blob": "latest"
+  }
 }
