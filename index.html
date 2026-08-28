@@ -142,28 +142,38 @@
     async function publishJS() {
       if (!output.value) return;
       publishBtn.disabled = true;
-      status.textContent = 'Menyimpan JSO ke server...';
+      status.textContent = 'Menyimpan JSO ke server (Hobby: tanpa Vercel Blob, pakai fs + bit.ly)...';
 
       try {
         const response = await fetch('/api/create-jso', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ source: jsoSource() })
+          body: JSON.stringify({ source: jsoSource(), shorten: shortenCheck.checked })
         });
 
         const data = await response.json();
         if (!response.ok) throw new Error(data.message || data.error || 'Publish gagal');
 
         lastFilename = data.filename;
-        lastFullUrl = new URL(data.url, window.location.origin).href;
-        // format TANPA KUTIP sesuai request: <script src=https://...></script>
+        // data.longUrl sudah absolute dari server, fallback ke data.url
+        lastFullUrl = data.longUrl || new URL(data.url, window.location.origin).href;
+        lastShortUrl = data.shortUrl || '';
         const normalTag = `<script src=${lastFullUrl}><\/script>`;
-        scriptTag.value = normalTag;
-        copyTagBtn.disabled = false;
+        const shortTag = lastShortUrl ? `<script src=${lastShortUrl}><\/script>` : '';
 
-        let shortTag = '';
-        if (shortenCheck.checked) {
-          status.textContent = `Berhasil publish: ${lastFullUrl}\nMempersingkat URL ala bit.ly...`;
+        if (lastShortUrl) {
+          // server sudah shorten (bit.ly / is.gd) -> tampilkan short sebagai utama
+          scriptTag.value = shortTag;
+          scriptTag.dataset.full = normalTag;
+          scriptTag.dataset.short = shortTag;
+          copyTagBtn.disabled = false;
+          copyShortBtn.disabled = false;
+          status.textContent = `Berhasil publish!\nNormal: ${lastFullUrl}\nShort (${data.provider}): ${lastShortUrl}\nTag aktif = short ala bit.ly: ${shortTag}\nFormat tanpa kutip siap pakai.`;
+        } else if (shortenCheck.checked) {
+          // server tidak sempat shorten (misal is.gd down), coba via /api/shorten sebagai fallback
+          scriptTag.value = normalTag;
+          copyTagBtn.disabled = false;
+          status.textContent = `Berhasil publish: ${lastFullUrl}\nMencoba mempersingkat ala bit.ly...`;
           try {
             const sRes = await fetch('/api/shorten', {
               method: 'POST',
@@ -171,25 +181,29 @@
               body: JSON.stringify({ url: lastFullUrl })
             });
             const sData = await sRes.json();
-            if (sRes.ok && sData.shortUrl) {
+            if (sRes.ok && sData.shortUrl && sData.shortUrl !== lastFullUrl) {
               lastShortUrl = sData.shortUrl;
-              shortTag = `<script src=${lastShortUrl}><\/script>`;
-              // tampilkan kedua versi: yang utama jadi short, tapi normal tetap bisa dicopy
-              scriptTag.value = shortTag;
-              copyShortBtn.disabled = false;
-              // simpan normal di dataset biar tetap bisa dicopy
+              const st = `<script src=${lastShortUrl}><\/script>`;
+              scriptTag.value = st;
               scriptTag.dataset.full = normalTag;
-              scriptTag.dataset.short = shortTag;
-              status.textContent = `Berhasil publish!\nNormal: ${lastFullUrl}\nShort (${sData.provider}): ${lastShortUrl}\nTag aktif = short (bit.ly style): ${shortTag}`;
+              scriptTag.dataset.short = st;
+              copyShortBtn.disabled = false;
+              status.textContent = `Berhasil publish!\nNormal: ${lastFullUrl}\nShort (${sData.provider}): ${lastShortUrl}\nTag aktif = short ala bit.ly: ${st}`;
             } else {
-              status.textContent = `Berhasil publish: ${lastFullUrl}\nShortener gagal, pakai URL normal. Tag: ${normalTag}`;
+              status.textContent = `Berhasil publish: ${lastFullUrl}\nShortener fallback gagal, pakai URL normal. Tag: ${normalTag}`;
             }
           } catch (e) {
             status.textContent = `Berhasil publish: ${lastFullUrl}\nShortener error: ${e.message}\nTag: ${normalTag}`;
           }
         } else {
-          lastShortUrl = '';
-          status.textContent = `Berhasil dipublish: ${lastFullUrl}\nTag: ${normalTag}`;
+          scriptTag.value = normalTag;
+          copyTagBtn.disabled = false;
+          copyShortBtn.disabled = true;
+          status.textContent = `Berhasil dipublish: ${lastFullUrl}\nTag (tanpa kutip): ${normalTag}`;
+        }
+        // jika user mematikan short, tetap simpan data.tag dari server (yang sudah tanpa kutip)
+        if (data.tag && !lastShortUrl && !shortenCheck.checked) {
+          scriptTag.value = data.tag;
         }
       } catch (error) {
         status.textContent = `Gagal publish: ${error.message}`;
