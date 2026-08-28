@@ -1,22 +1,189 @@
 <!DOCTYPE html>
-<html>
+<html lang="id">
 <head>
-    <title>HTML to JSO Generator</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HTML → JSO Converter</title>
+  <style>
+    :root { color-scheme: dark; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #0b0f14;
+      color: #e8edf3;
+    }
+    .wrap { width: min(1000px, calc(100% - 32px)); margin: 0 auto; padding: 42px 0; }
+    h1 { margin: 0 0 8px; font-size: clamp(28px, 5vw, 42px); }
+    .sub { margin: 0 0 28px; color: #9aa7b5; }
+    .card {
+      background: #111821;
+      border: 1px solid #253140;
+      border-radius: 18px;
+      padding: 20px;
+      margin-bottom: 18px;
+    }
+    label { display: block; margin-bottom: 9px; font-size: 14px; font-weight: 700; color: #cbd5e1; }
+    textarea, input {
+      width: 100%;
+      border: 1px solid #2a3746;
+      border-radius: 12px;
+      background: #0a0f15;
+      color: #e8edf3;
+      padding: 13px 14px;
+      outline: none;
+      font: 14px/1.55 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+    textarea { min-height: 190px; resize: vertical; }
+    textarea:focus, input:focus { border-color: #6b7f96; }
+    .row { display: grid; grid-template-columns: 1fr auto; gap: 12px; align-items: end; }
+    .actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 14px; }
+    button {
+      border: 0; border-radius: 10px; padding: 11px 16px; cursor: pointer;
+      background: #e8edf3; color: #0b0f14; font-weight: 750;
+    }
+    button.secondary { background: #202b38; color: #e8edf3; border: 1px solid #334254; }
+    button:disabled { opacity: .45; cursor: not-allowed; }
+    .hint { margin-top: 9px; color: #7f8c9b; font-size: 12px; }
+    .status { min-height: 20px; margin-top: 12px; color: #aab7c5; font-size: 13px; }
+    .output { min-height: 230px; }
+    .tag { min-height: 80px; }
+    .danger { color: #ffb4b4; }
+    @media (max-width: 700px) { .row { grid-template-columns: 1fr; } .wrap { width: min(100% - 20px, 1000px); padding: 25px 0; } }
+  </style>
 </head>
-<body style="font-family: sans-serif; padding: 20px;">
-    <h3>HTML to JSO Converter</h3>
-    <textarea id="inputHtml" rows="10" style="width: 100%;" placeholder="Paste HTML di sini..."></textarea><br><br>
-    <button onclick="convertJSO()" style="padding: 10px 20px; cursor: pointer;">Convert to JSO</button><br><br>
-    <textarea id="outputJso" rows="10" style="width: 100%;" placeholder="Hasil JSO script..."></textarea>
+<body>
+  <main class="wrap">
+    <h1>HTML → JSO</h1>
+    <p class="sub">Convert HTML menjadi deretan angka desimal dan generate file JavaScript loader.</p>
 
-    <script>
-        function convertJSO() {
-            const input = document.getElementById('inputHtml').value;
-            // Mengubah teks HTML menjadi format escape hex
-            const escaped = escape(input);
-            const jsoOutput = `document.write(unescape('${escaped}'));`;
-            document.getElementById('outputJso').value = jsoOutput;
-        }
-    </script>
+    <section class="card">
+      <label for="inputHtml">HTML INPUT</label>
+      <textarea id="inputHtml" placeholder="Paste HTML di sini..."></textarea>
+      <div class="actions">
+        <button id="convertBtn">Convert to JSO</button>
+        <button id="clearBtn" class="secondary">Clear</button>
+      </div>
+    </section>
+
+    <section class="card">
+      <label for="outputJso">JSO OUTPUT — DECIMAL CHAR CODES</label>
+      <textarea id="outputJso" class="output" readonly placeholder="Contoh: 60,33,68,79,..."></textarea>
+      <div class="actions">
+        <button id="downloadBtn" class="secondary" disabled>Download .js</button>
+        <button id="copyJsoBtn" class="secondary" disabled>Copy JSO</button>
+      </div>
+    </section>
+
+    <section class="card">
+      <label for="baseUrl">BASE URL UNTUK SCRIPT TAG</label>
+      <input id="baseUrl" value="https://convert-virid.vercel.app/jso/" spellcheck="false">
+      <div class="hint">Masukkan lokasi tempat file .js hasil upload/deploy akan tersedia.</div>
+      <div class="actions">
+        <button id="autoBtn" disabled>Auto Create Script Tag</button>
+      </div>
+      <label for="scriptTag" style="margin-top:18px">SCRIPT TAG</label>
+      <textarea id="scriptTag" class="tag" readonly placeholder="&lt;script src=...&gt;&lt;/script&gt;"></textarea>
+      <button id="copyTagBtn" class="secondary" disabled style="margin-top:10px">Copy Tag</button>
+      <div id="status" class="status"></div>
+    </section>
+  </main>
+
+  <script>
+    const input = document.getElementById('inputHtml');
+    const output = document.getElementById('outputJso');
+    const baseUrl = document.getElementById('baseUrl');
+    const scriptTag = document.getElementById('scriptTag');
+    const status = document.getElementById('status');
+    const downloadBtn = document.getElementById('downloadBtn');
+    const copyJsoBtn = document.getElementById('copyJsoBtn');
+    const autoBtn = document.getElementById('autoBtn');
+    const copyTagBtn = document.getElementById('copyTagBtn');
+
+    let lastFilename = '';
+
+    // Encode every Unicode code point as a decimal value.
+    // The generated JSO is self-contained and reconstructs the original HTML
+    // with String.fromCodePoint(...), avoiding eval/unescape.
+    function convertJSO() {
+      const value = input.value;
+      if (!value) {
+        output.value = '';
+        status.textContent = 'Masukkan HTML terlebih dahulu.';
+        return;
+      }
+
+      const codes = Array.from(value, ch => ch.codePointAt(0));
+      output.value = codes.join(',');
+      lastFilename = createFilename(value);
+      downloadBtn.disabled = false;
+      copyJsoBtn.disabled = false;
+      autoBtn.disabled = false;
+      copyTagBtn.disabled = true;
+      scriptTag.value = '';
+      status.textContent = `${codes.length.toLocaleString('id-ID')} karakter dikonversi → ${lastFilename}`;
+    }
+
+    function createFilename(value) {
+      // Stable short filename, similar to the old random-looking JSO filenames.
+      let hash = 2166136261;
+      for (const ch of value) {
+        hash ^= ch.codePointAt(0);
+        hash = Math.imul(hash, 16777619);
+      }
+      return (hash >>> 0).toString(16).padStart(8, '0') + '.js';
+    }
+
+    function jsoSource() {
+      return `document.write(String.fromCodePoint(${output.value}));\n`;
+    }
+
+    function downloadJS() {
+      if (!output.value) return;
+      const blob = new Blob([jsoSource()], { type: 'application/javascript;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = lastFilename || 'jso.js';
+      a.click();
+      URL.revokeObjectURL(url);
+      status.textContent = `File ${a.download} berhasil dibuat. Upload file ini ke folder JSO kamu.`;
+    }
+
+    function makeScriptTag() {
+      if (!output.value) return;
+      let url = baseUrl.value.trim();
+      if (!url) {
+        status.textContent = 'Base URL belum diisi.';
+        return;
+      }
+      if (!url.endsWith('/')) url += '/';
+      const fullUrl = url + lastFilename;
+      scriptTag.value = `<script src=${fullUrl}><\/script>`;
+      copyTagBtn.disabled = false;
+      status.textContent = 'Script tag berhasil dibuat. File .js harus tersedia di URL tersebut agar tag dapat dipakai.';
+    }
+
+    async function copyText(value, message) {
+      try {
+        await navigator.clipboard.writeText(value);
+        status.textContent = message;
+      } catch {
+        status.textContent = 'Gagal menyalin otomatis. Silakan copy secara manual.';
+      }
+    }
+
+    document.getElementById('convertBtn').onclick = convertJSO;
+    document.getElementById('clearBtn').onclick = () => {
+      input.value = ''; output.value = ''; scriptTag.value = ''; lastFilename = '';
+      downloadBtn.disabled = true; copyJsoBtn.disabled = true; autoBtn.disabled = true; copyTagBtn.disabled = true;
+      status.textContent = '';
+    };
+    downloadBtn.onclick = downloadJS;
+    copyJsoBtn.onclick = () => copyText(output.value, 'Deretan angka berhasil disalin.');
+    autoBtn.onclick = makeScriptTag;
+    copyTagBtn.onclick = () => copyText(scriptTag.value, 'Script tag berhasil disalin.');
+  </script>
 </body>
 </html>
